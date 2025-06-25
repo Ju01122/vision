@@ -103,3 +103,13 @@ if not data.empty:
         st.bar_chart(-expense_summary)  # 지출은 음수로 표시
     else:
         st.info("지출 내역이 있어야 분석이 가능합니다.")
+
+[google_sheets]
+type = "service_account"
+project_id = "your-project-id"
+private_key_id = "abc123..."
+private_key = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+client_email = "xxx@xxx.iam.gserviceaccount.com"
+client_id = "..."
+auth_uri = "https://accounts.google.com/o/oauth2/auth"
+token_uri = "https://oauth2.googleapis.com/token"
