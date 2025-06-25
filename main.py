@@ -1,59 +1,81 @@
 import streamlit as st
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 import pandas as pd
 from datetime import datetime
 
-# 구글 시트 연결 함수
-@st.cache_resource
-def connect_gsheet():
-    scope = [
-        "https://spreadsheets.google.com/feeds",
-        "https://www.googleapis.com/auth/drive"
-    ]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(
-        st.secrets["google_sheets"], scope
-    )
-    client = gspread.authorize(creds)
-    sheet = client.open("용돈기입장").sheet1  # 시트 이름을 꼭 본인 것과 맞춰주세요!
-    return sheet
+st.set_page_config(page_title="용돈기입장", page_icon="💸", layout="centered")
 
-# 시트 불러오기
-sheet = connect_gsheet()
+# 세션 상태로 임시 데이터 저장
+if "ledger" not in st.session_state:
+    st.session_state.ledger = pd.DataFrame(columns=["날짜", "분류", "내용", "금액", "수입/지출"])
 
-# 시트 데이터 불러오기
-def get_data():
-    records = sheet.get_all_records()
-    df = pd.DataFrame(records)
-    return df
+st.title("💸 용돈기입장")
 
-# 새로운 항목 추가
-def add_entry(date, amount, category, note):
-    new_row = [date, amount, category, note]
-    sheet.append_row(new_row)
+# 탭으로 기능 분리
+tab1, tab2, tab3 = st.tabs(["➕ 입력하기", "📋 전체 내역", "📊 통계 보기"])
 
-# 앱 UI
-st.title("💰 용돈기입장 앱")
+with tab1:
+    st.subheader("➕ 새 내역 입력")
 
-with st.form("entry_form"):
-    col1, col2 = st.columns(2)
-    with col1:
-        date = st.date_input("날짜", value=datetime.today())
-        amount = st.number_input("금액", min_value=0, step=100)
-    with col2:
-        category = st.radio("구분", ["수입", "지출"], horizontal=True)
-        note = st.text_input("비고", placeholder="예: 알바비, 커피 등")
+    with st.form("entry_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            date = st.date_input("날짜", value=datetime.today())
+            category = st.selectbox("분류", ["식비", "교통", "문화", "쇼핑", "기타"])
+        with col2:
+            amount = st.number_input("금액", min_value=0, step=100)
+            type_ = st.radio("수입/지출", ["수입", "지출"], horizontal=True)
+        
+        description = st.text_input("내용", placeholder="예: 편의점 간식")
 
-    submitted = st.form_submit_button("기록 추가")
-    if submitted:
-        add_entry(str(date), amount, category, note)
-        st.success("✅ 기록이 저장되었습니다!")
+        submitted = st.form_submit_button("저장")
+        if submitted:
+            new_data = {
+                "날짜": pd.to_datetime(date).strftime("%Y-%m-%d"),
+                "분류": category,
+                "내용": description,
+                "금액": amount,
+                "수입/지출": type_
+            }
+            st.session_state.ledger = pd.concat(
+                [st.session_state.ledger, pd.DataFrame([new_data])],
+                ignore_index=True
+            )
+            st.success("저장되었습니다!")
 
-# 저장된 기록 보기
-st.subheader("📋 기록 내역")
-data = get_data()
+with tab2:
+    st.subheader("📋 전체 내역 보기")
+    if st.session_state.ledger.empty:
+        st.info("아직 입력된 내역이 없습니다.")
+    else:
+        df = st.session_state.ledger.copy()
+        st.dataframe(df.sort_values("날짜", ascending=False), use_container_width=True)
 
-if not data.empty:
-    st.dataframe(data)
-else:
-    st.info("기록이 아직 없습니다. 위에서 입력해 주세요.")
+with tab3:
+    st.subheader("📊 통계 보기")
+    df = st.session_state.ledger
+    if df.empty:
+        st.info("데이터가 없어요. 먼저 입력해 주세요!")
+    else:
+        col1, col2 = st.columns(2)
+        income = df[df["수입/지출"] == "수입"]["금액"].sum()
+        expense = df[df["수입/지출"] == "지출"]["금액"].sum()
+        balance = income - expense
+
+        with col1:
+            st.metric("총 수입", f"{income:,.0f} 원")
+            st.metric("총 지출", f"{expense:,.0f} 원")
+        with col2:
+            st.metric("잔액", f"{balance:,.0f} 원", delta=f"{income - expense:,.0f} 원")
+
+        st.divider()
+
+        # 카테고리별 지출 합계
+        exp_by_cat = (
+            df[df["수입/지출"] == "지출"]
+            .groupby("분류")["금액"]
+            .sum()
+            .sort_values(ascending=False)
+        )
+
+        st.bar_chart(exp_by_cat)
+
