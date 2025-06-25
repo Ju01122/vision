@@ -76,3 +76,31 @@ else:
     else:
         st.info("지출 기록이 있어야 파이차트를 볼 수 있어요.")
 
+# 입력 폼
+st.subheader("📥 새로운 내역 입력")
+with st.form("entry_form"):
+    col1, col2 = st.columns(2)
+    with col1:
+        date_input = st.date_input("날짜", date.today())
+    with col2:
+        type_input = st.radio("유형", ["수입", "지출"], horizontal=True)
+
+    title_input = st.text_input("항목 (예: 편의점, 알바, 용돈)")
+    amount_input = st.number_input("금액", min_value=0, step=100)
+    note_input = st.text_input("비고 (선택)")  # ✅ 추가
+
+    submitted = st.form_submit_button("저장")
+
+    if submitted:
+        if title_input and amount_input > 0:
+            new_data = pd.DataFrame({
+                "날짜": [pd.to_datetime(date_input)],
+                "항목": [title_input],
+                "금액": [amount_input if type_input == "수입" else -amount_input],
+                "유형": [type_input],
+                "비고": [note_input]  # ✅ 추가
+            })
+            data = pd.concat([data, new_data], ignore_index=True)
+            save_data(data)
+            st.success("✅ 기록이 저장되었습니다!")
+            st.rerun()
